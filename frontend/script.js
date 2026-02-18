@@ -80,7 +80,7 @@ function showProactiveGreeting() {
   if (getMemory().length === 0) {
     const greeting = "Hi! I'm your car selling assistant. What brings you here today?";
     appendMessage('bot', greeting);
-    addToMemory('bot', greeting);
+    addToMemory('assistant', greeting);
   }
 }
 
@@ -102,7 +102,7 @@ chatForm.onsubmit = async e => {
   const reply = await getBotReply();
   removeLoading();
   appendMessage('bot', reply);
-  addToMemory('bot', reply);
+  addToMemory('assistant', reply);
 };
 
 async function getBotReply() {
@@ -117,7 +117,7 @@ async function getBotReply() {
   }
   const messages = [
     { role: 'system', content: context },
-    ...memory.slice(-10) // last 10 turns
+    ...memory.slice(-10).map(m => ({ ...m, role: m.role === 'bot' ? 'assistant' : m.role }))
   ];
   try {
     const res = await fetch(CONFIG.api.openrouter_url, {
@@ -148,6 +148,11 @@ async function getBotReply() {
 
 // --- Init ---
 document.addEventListener('DOMContentLoaded', () => {
+  // Migrate old 'bot' roles to 'assistant' in stored memory
+  const mem = getMemory();
+  if (mem.some(m => m.role === 'bot')) {
+    setMemory(mem.map(m => ({ ...m, role: m.role === 'bot' ? 'assistant' : m.role })));
+  }
   chatArea.innerHTML = '';
   showProactiveGreeting();
 });
