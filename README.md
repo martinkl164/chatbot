@@ -1,87 +1,146 @@
 # Car Seller Chatbot
 
-A simple, proactive chatbot for assisting users in selling and buying cars. Runs entirely in the browser, deployable to GitHub Pages.
+A secure, proactive chatbot for buying and selling cars. Runs entirely in the browser — no backend required. Deployable to GitHub Pages.
 
 ## Features
-- **Proactive conversation** - Bot initiates and drives the conversation
-- **Memory** - Stores conversation history in browser localStorage (last 20 turns)
-- **Learning loop** - Extracts key elements (intent, recipient, topic) and builds context
-- **Configurable** - Customize system prompt, temperature, and AI model settings
-- **No backend** - Runs entirely client-side
-- **OpenRouter integration** - Direct REST API calls
-- **Modern UI** - Clean, responsive design
+
+- **AI-driven memory loop** — after every reply the AI extracts structured facts (budget, car type, make, model, timeline, etc.) and stores them in `localStorage`. Those facts are fed back into every subsequent request so the bot never asks the same question twice.
+- **Secure system prompt** — hardened against prompt injection, jailbreak attempts, persona swaps, and topic drift. Bot stays strictly on car buying/selling.
+- **Input sanitization** — XML injection tags stripped from user input; 500-character cap enforced at both HTML and JS layers.
+- **Memory field validation** — only whitelisted field names and allowlisted enum values are accepted from AI output.
+- **Send button lock** — input and button are disabled while a request is in flight; re-enabled and focused on reply.
+- **Memory toast** — a non-intrusive badge appears top-right listing which facts were updated each turn, with a full console dump for debugging.
+- **Configurable** — system prompt, model, temperature and all AI parameters are editable without touching code.
+- **No backend** — pure client-side, zero dependencies.
+- **OpenRouter integration** — compatible with any OpenAI-format model.
+- **Responsive UI** — clean design, works on mobile and desktop.
 
 ## Quick Start
 
 ### Local Development
-1. Copy `.env.local.example` to `.env.local` in the `frontend/` folder
-2. Add your OpenRouter API key to `.env.local`:
-   ```
-   OPENROUTER_API_KEY=your_actual_key_here
-   ```
-3. Run local server:
+
+1. Copy `.env.local.example` to `.env.local` inside `frontend/`:
    ```bash
    cd frontend
+   copy .env.local.example .env.local   # Windows
+   cp .env.local.example .env.local     # Mac / Linux
+   ```
+2. Add your OpenRouter API key:
+   ```
+   OPENROUTER_API_KEY=sk-or-v1-xxxxxxxxxxxxx
+   ```
+3. Start a local server:
+   ```bash
    python -m http.server 8000
    ```
-4. Visit http://localhost:8000
+4. Open http://localhost:8000
 
 ### GitHub Pages Deployment
-1. Create repository and push code
-2. Go to repository Settings → Secrets and variables → Actions
-3. Add secret: `OPENROUTER_API_KEY` with your OpenRouter API key
-4. Go to Settings → Pages
-5. Set source to "GitHub Actions"
-6. Push to `main` branch - auto-deployment will trigger
 
-See [SETUP.md](SETUP.md) for detailed instructions.
+1. Add repository secret `OPENROUTER_API_KEY` (Settings → Secrets and variables → Actions)
+2. Enable GitHub Pages with source set to **GitHub Actions** (Settings → Pages)
+3. Push to `main` — the workflow deploys automatically
+
+See [SETUP.md](SETUP.md) for full step-by-step instructions.
 
 ## Configuration
 
 ### System Prompt
-Edit `frontend/system_prompt.md` to customize the bot's behavior and personality.
 
-### AI Settings & API Configuration
-Edit `frontend/config.json` to configure all settings:
+`frontend/system_prompt.md` controls the bot's identity, security rules, output format, and tracked fields. Edit it to adjust personality or add new fields. The file is loaded at runtime — refresh the page to apply changes.
 
-**API Section (`api`):**
-- `openrouter_url` - OpenRouter API endpoint
+### AI & API Settings
 
-**AI Settings Section (`ai`):**
-- `model` - AI model to use (default: `openai/gpt-3.5-turbo`)
-- `temperature` - Response creativity (0-2, default: 0.7)
-- `max_tokens` - Response length limit (default: 200)
-- `top_p` - Nucleus sampling (0-1)
-- `frequency_penalty` - Reduce repetition (-2 to 2)
-- `presence_penalty` - Encourage new topics (-2 to 2)
+`frontend/config.json`:
 
-### API Key Configuration
-- **Local development:** Use `.env.local` file (copy from `.env.local.example`)
-- **GitHub Pages:** Use GitHub Secrets (see SETUP.md)
+```json
+{
+  "api": {
+    "openrouter_url": "https://openrouter.ai/api/v1/chat/completions"
+  },
+  "ai": {
+    "model": "openrouter/aurora-alpha",
+    "temperature": 0.7,
+    "max_tokens": 500,
+    "top_p": 1,
+    "frequency_penalty": 0,
+    "presence_penalty": 0
+  }
+}
+```
+
+| Field | Description |
+|---|---|
+| `model` | Any OpenRouter-compatible model ID |
+| `temperature` | Creativity: 0 = focused, 2 = creative |
+| `max_tokens` | Max tokens per reply (500 accommodates reply + memory JSON) |
+| `top_p` | Nucleus sampling |
+| `frequency_penalty` | Reduce word repetition |
+| `presence_penalty` | Encourage new topics |
+
+### API Key
+
+- **Local:** `.env.local` file (never committed)
+- **Deployed:** GitHub Secret `OPENROUTER_API_KEY` (injected at build time)
+
+## How the Memory Loop Works
+
+```
+User sends message
+  └─► sanitizeUserInput()       strip injection tags, cap at 500 chars
+  └─► addToMemory('user', msg)  append to rolling 20-turn history
+  └─► getBotReply()
+        ├─ build system message = system_prompt.md + ## Known user info
+        ├─ send last 10 turns to OpenRouter
+        └─ receive raw response
+              ├─ parseAIResponse()     extract <reply> and <memory> blocks
+              ├─ mergeKeyElements()    validate + store new facts
+              └─ showMemoryToast()     display changed fields
+  └─► addToMemory('assistant', reply)  store clean reply text only
+```
+
+**Tracked fields:** `intent`, `budget`, `carType`, `make`, `model`, `year`, `mileage`, `condition`, `timeline`, `location`, `tradeIn`, `financing`, `sellerAsk`, `recipient`
+
+**localStorage keys:**
+- `carbot_memory_v1` — conversation history (last 20 turns)
+- `carbot_keys` — accumulated user profile (14 fields)
+
+## Security
+
+| Layer | Mechanism |
+|---|---|
+| Prompt | Identity lock, topic restriction, injection pattern blacklist, no self-disclosure |
+| Input | XML tag stripping, control character removal, 500-char hard cap |
+| Memory | Field whitelist, enum allowlists (`intent`, `tradeIn`, `financing`), 80-char per-field cap |
+| UI | `maxlength="500"` on input, send button disabled during requests |
+| API key | Never in code; `.env.local` excluded from git; GitHub Secrets for deployment |
 
 ## Project Structure
+
 ```
 chatbot/
 ├── frontend/
-│   ├── index.html           # Main UI
-│   ├── style.css            # Styling
-│   ├── script.js            # Logic, memory, API integration
-│   ├── config.json          # API & AI settings (editable)
-│   ├── system_prompt.md     # Bot system prompt (editable)
-│   └── .env.local.example   # Environment template
+│   ├── index.html           # UI shell + memory toast element
+│   ├── style.css            # Styles incl. disabled states + toast
+│   ├── script.js            # Memory loop, sanitization, API, UI logic
+│   ├── config.json          # API endpoint + AI parameters
+│   ├── system_prompt.md     # Bot identity, security rules, output format
+│   └── .env.local.example   # API key template
 ├── .github/workflows/
-│   └── deploy.yml           # Auto-deployment pipeline
-├── README.md                # This file
-├── SETUP.md                 # Setup instructions
-└── assignment.md            # Original requirements
+│   └── deploy.yml           # CI/CD: inject secret → build → deploy
+├── README.md
+├── SETUP.md
+├── IMPLEMENTATION.md
+└── TESTING.md
 ```
 
 ## Technology
-- Pure HTML/CSS/JavaScript (no frameworks)
-- localStorage for memory
-- OpenRouter API for AI responses
-- GitHub Actions for deployment
-- GitHub Pages for hosting
+
+- Pure HTML / CSS / JavaScript — no frameworks, no bundler
+- `localStorage` for conversation history and user profile
+- OpenRouter REST API (OpenAI-compatible)
+- GitHub Actions + GitHub Pages for deployment
 
 ## License
+
 MIT

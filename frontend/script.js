@@ -151,6 +151,17 @@ function showMemoryToast(changedFields) {
     toast.classList.add('toast-hide');
   }, 4500);
 }
+function appendWelcomeMessage() {
+  const welcome = document.createElement('div');
+  welcome.className = 'welcome-message';
+  welcome.innerHTML = `
+    <div class="welcome-icon">&#x1F697;</div>
+    <h2>Welcome to Car Seller Chatbot</h2>
+    <p>I'm here to help you <strong>buy or sell a car</strong>.<br>Ask me anything to get started!</p>
+  `;
+  chatArea.appendChild(welcome);
+}
+
 function showProactiveGreeting() {
   if (getMemory().length === 0) {
     const greeting = "Hi! I'm your car selling assistant. What brings you here today?";
@@ -273,6 +284,14 @@ async function getBotReply() {
   }
 }
 
+// --- Start Over ---
+function startOver() {
+  clearMemory();
+  chatArea.innerHTML = '';
+  appendWelcomeMessage();
+  showProactiveGreeting();
+}
+
 // --- Init ---
 document.addEventListener('DOMContentLoaded', () => {
   // Migrate old 'bot' roles to 'assistant' in stored memory
@@ -281,5 +300,8 @@ document.addEventListener('DOMContentLoaded', () => {
     setMemory(mem.map(m => ({ ...m, role: m.role === 'bot' ? 'assistant' : m.role })));
   }
   chatArea.innerHTML = '';
+  appendWelcomeMessage();
   showProactiveGreeting();
+
+  document.getElementById('startOverBtn').addEventListener('click', startOver);
 });

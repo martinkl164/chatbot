@@ -1,106 +1,113 @@
 # Setup Guide
 
 ## Prerequisites
+
 - GitHub account
 - OpenRouter account (free): https://openrouter.ai/
+- Python 3 (for local development server)
 
-## Local Development Setup
+---
 
-### 1. Get OpenRouter API Key
+## Local Development
+
+### 1. Get an OpenRouter API Key
+
 1. Go to https://openrouter.ai/
 2. Sign up or log in
-3. Navigate to Keys section
-4. Create a new API key
-5. Copy the key
+3. Navigate to **Keys**
+4. Create a new API key and copy it
 
-### 2. Configure Local Environment
-1. Navigate to `frontend/` folder
-2. Copy `.env.local.example` to `.env.local`:
-   ```bash
-   cd frontend
-   copy .env.local.example .env.local    # Windows
-   # or
-   cp .env.local.example .env.local      # Linux/Mac
-   ```
-3. Edit `.env.local` and replace `your_api_key_here` with your actual OpenRouter API key:
-   ```
-   OPENROUTER_API_KEY=sk-or-v1-xxxxxxxxxxxxx
-   ```
+### 2. Configure the Local Environment
 
-### 3. Run Locally
+```bash
+cd frontend
+copy .env.local.example .env.local    # Windows
+cp .env.local.example .env.local      # Mac / Linux
+```
+
+Edit `.env.local` and replace the placeholder:
+
+```
+OPENROUTER_API_KEY=sk-or-v1-xxxxxxxxxxxxx
+```
+
+> `.env.local` is listed in `.gitignore` and will never be committed.
+
+### 3. Start the Local Server
+
 ```bash
 cd frontend
 python -m http.server 8000
 ```
+
 Visit http://localhost:8000
 
-**Note:** `.env.local` is in `.gitignore` and will NOT be committed to git.
+---
 
 ## GitHub Pages Deployment
 
-### 1. Create GitHub Repository
+### 1. Create a GitHub Repository
+
 1. Go to https://github.com/new
-2. Create a new repository (e.g., "car-seller-chatbot")
-3. Do NOT initialize with README (we already have one)
+2. Create a new repository (e.g. `car-seller-chatbot`)
+3. Do **not** initialise with a README — the project already has one
 
-### 2. Add OpenRouter API Key as GitHub Secret
-**IMPORTANT:** For the chatbot to work on GitHub Pages, you must add your API key as a secret.
+### 2. Add the API Key as a GitHub Secret
 
-1. Go to your repository on GitHub
-2. Click **Settings** → **Secrets and variables** → **Actions**
-3. Click **New repository secret**
-4. Name: `OPENROUTER_API_KEY`
-5. Value: Your OpenRouter API key (e.g., `sk-or-v1-xxxxxxxxxxxxx`)
-6. Click **Add secret**
+1. Go to your repository → **Settings** → **Secrets and variables** → **Actions**
+2. Click **New repository secret**
+3. Name: `OPENROUTER_API_KEY`
+4. Value: your OpenRouter API key
+5. Click **Add secret**
 
-### 3. Enable GitHub Pages with Actions
-1. Go to repository **Settings** → **Pages**
-2. Under "Build and deployment", set Source to: **GitHub Actions**
+### 3. Enable GitHub Pages
+
+1. Repository **Settings** → **Pages**
+2. Under "Build and deployment" set Source to **GitHub Actions**
 3. Save
 
-### 4. Push Code to GitHub
+### 4. Push the Code
+
 ```bash
 git init
 git add .
-git commit -m "Initial commit: Car seller chatbot"
+git commit -m "Initial commit"
 git branch -M main
 git remote add origin https://github.com/<your-username>/<your-repo>.git
 git push -u origin main
 ```
 
 ### 5. Verify Deployment
-1. Go to **Actions** tab in your repository
-2. You should see "Deploy to GitHub Pages" workflow running
-3. Wait for green checkmark (deployment complete)
-4. Go to **Settings** → **Pages** to get your site URL
-5. Visit: `https://<your-username>.github.io/<your-repo>/`
 
-### 6. Test the Chatbot
-1. Open your deployed site
-2. The chatbot should load and greet you
-3. Start chatting!
+1. Go to the **Actions** tab — watch the "Deploy to GitHub Pages" workflow
+2. Green checkmark = deployed
+3. **Settings** → **Pages** shows your live URL: `https://<username>.github.io/<repo>/`
 
-**Note:** The API key from GitHub Secrets will be automatically injected during deployment.
+---
 
 ## Configuration
 
-### Customize System Prompt
-Edit `frontend/system_prompt.md` to change how the bot behaves:
-```
-You are a proactive assistant helping users sell or buy cars...
-```
+### System Prompt
 
-### Adjust AI Settings & API Configuration
-Edit `frontend/config.json` to configure all settings:
+Edit `frontend/system_prompt.md` to adjust the bot's persona, security rules, output format, or tracked fields. Changes take effect on the next page load.
+
+The file contains:
+- **Identity & role** — CarBot, car buying/selling only
+- **Security rules** — injection rejection, topic lock, no self-disclosure
+- **Output format** — required `<reply>` / `<memory>` structure
+- **Tracked fields** — the 14 user-profile fields the AI extracts
+
+### AI Settings (`frontend/config.json`)
+
 ```json
 {
   "api": {
     "openrouter_url": "https://openrouter.ai/api/v1/chat/completions"
   },
   "ai": {
-    "model": "openai/gpt-3.5-turbo",
+    "model": "openrouter/aurora-alpha",
     "temperature": 0.7,
-    "max_tokens": 200,
+    "max_tokens": 500,
     "top_p": 1,
     "frequency_penalty": 0,
     "presence_penalty": 0
@@ -108,58 +115,59 @@ Edit `frontend/config.json` to configure all settings:
 }
 ```
 
-**API settings (`api` section):**
-- `openrouter_url` - OpenRouter API endpoint URL
+| Field | Description |
+|---|---|
+| `model` | Any OpenRouter model ID |
+| `temperature` | 0 = precise, 2 = creative |
+| `max_tokens` | 500 recommended — covers reply + memory JSON |
+| `top_p` | Nucleus sampling |
+| `frequency_penalty` | Reduce repetition |
+| `presence_penalty` | Encourage new topics |
 
-**AI settings (`ai` section):**
-- `model` - Which AI model to use (see OpenRouter for options)
-- `temperature` - Creativity/randomness (0 = focused, 2 = creative)
-- `max_tokens` - Maximum response length
-- `top_p` - Nucleus sampling (0-1)
-- `frequency_penalty` - Reduce repetition (-2 to 2)
-- `presence_penalty` - Encourage new topics (-2 to 2)
+---
 
-## Updating Your Deployment
+## Updating a Deployment
 
-After making changes to code or configuration:
 ```bash
 git add .
-git commit -m "Your changes description"
+git commit -m "Describe your change"
 git push
 ```
 
-The GitHub Actions workflow will automatically redeploy.
+GitHub Actions rebuilds and redeploys automatically.
+
+---
 
 ## Troubleshooting
 
-### "API key not configured" message
-- **Local:** Check that `.env.local` exists in `frontend/` folder with correct key format: `OPENROUTER_API_KEY=your_key`
-- **GitHub Pages:** Verify `OPENROUTER_API_KEY` secret is set in repository Settings → Secrets → Actions
+### "API key not configured"
+- **Local:** confirm `frontend/.env.local` exists and contains `OPENROUTER_API_KEY=your_key`
+- **Deployed:** confirm the `OPENROUTER_API_KEY` secret is set in repository Settings → Secrets
 
 ### Deployment fails
-- Check **Actions** tab for error messages
-- Verify GitHub Pages is enabled with "GitHub Actions" as source
-- Ensure repository is public (or you have GitHub Pro for private repos)
+- Check the **Actions** tab for error details
+- Confirm GitHub Pages is enabled with **GitHub Actions** as the source
+- Public repositories work on the free plan; private repositories require GitHub Pro
 
-### Bot doesn't respond
-- Open browser console (F12) → Console tab
-- Look for errors
-- Check Network tab for failed API requests
-- Verify OpenRouter account is active and has credits
+### Bot does not respond
+- Open DevTools → **Console** — look for errors
+- Open DevTools → **Network** — inspect the failed OpenRouter request
+- Confirm your OpenRouter account is active and has credits
 
-### Changes not appearing
-- Hard refresh browser: Ctrl+Shift+R (Windows) or Cmd+Shift+R (Mac)
-- Clear browser cache
-- Wait a few minutes for GitHub Pages to rebuild
+### Memory not updating
+- Open DevTools → **Console** — the `[CarBot] Memory updated` log group shows extracted fields after each reply
+- Open DevTools → **Application** → **localStorage** — inspect `carbot_keys`
+- If the AI reply doesn't contain a `<memory>` block the toast won't appear; no new facts were extracted that turn
+
+### Changes not appearing after deploy
+- Hard-refresh: `Ctrl+Shift+R` (Windows) / `Cmd+Shift+R` (Mac)
+- Wait 1–2 minutes for GitHub Pages CDN to propagate
+
+---
 
 ## Security Notes
 
-- Never commit `.env.local` to git (it's in `.gitignore`)
-- Never hardcode API keys in code
-- GitHub Secrets are encrypted and secure
-
-## Get Help
-
-- Check OpenRouter documentation: https://openrouter.ai/docs
-- Review GitHub Actions logs in **Actions** tab
-- Check browser console for JavaScript errors
+- Never commit `.env.local` to git (it is in `.gitignore`)
+- Never hardcode the API key in any source file
+- GitHub Secrets are encrypted at rest and redacted from logs
+- The system prompt enforces topic lock and injection resistance; see `system_prompt.md` for details

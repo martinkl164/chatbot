@@ -1,180 +1,122 @@
-# Implementation Summary
+# Implementation Notes
 
-## Completed Tasks
+## Architecture Overview
 
-### 1. ✅ Extracted System Prompt
-- **File:** `frontend/system_prompt.md`
-- **Purpose:** Allows easy customization of bot personality and behavior
-- **Content:** Proactive car-selling assistant prompt
-- **Usage:** Edit file to change bot behavior, auto-loads on page refresh
-
-### 2. ✅ Configurable AI Settings
-- **File:** `frontend/config.json` (merged with API configuration)
-- **Structure:**
-  - `api` section: API endpoint configuration
-  - `ai` section: Model parameters (temperature, max_tokens, etc.)
-- **Parameters:**
-  - `model` - AI model selection
-  - `temperature` - Response creativity (0-2)
-  - `max_tokens` - Response length limit
-  - `top_p` - Nucleus sampling
-  - `frequency_penalty` - Reduce repetition
-  - `presence_penalty` - Encourage new topics
-- **Usage:** Edit file to tune AI responses, auto-loads on page refresh
-
-### 3. ✅ Local Environment API Key Storage
-- **File:** `frontend/.env.local` (user creates from example)
-- **Example:** `frontend/.env.local.example`
-- **Format:** `OPENROUTER_API_KEY=your_key_here`
-- **Security:** Added to `.gitignore` - never committed
-- **Priority:** Script checks `.env.local` first, then localStorage
-
-### 4. ✅ GitHub Secrets Integration
-- **Workflow:** `.github/workflows/deploy.yml`
-- **Secret Name:** `OPENROUTER_API_KEY`
-- **Deployment:** Automatically creates `.env.local` from secret during build
-- **Setup:** User adds secret in repository Settings → Secrets → Actions
-
-### 5. ✅ Minimal Documentation
-Kept only essential docs:
-- **README.md** - Project overview, quick start, configuration guide
-- **SETUP.md** - Detailed setup for local and GitHub Pages deployment
-- **assignment.md** - Original requirements (unchanged)
-- **TESTING.md** - Testing checklist
-
-Removed:
-- ❌ DEVELOPER.md
-- ❌ DEPLOYMENT.md
-- ❌ PROJECT_SUMMARY.md
-- ❌ QUICKSTART.md
-- ❌ TESTING_CHECKLIST.md
-- ❌ frontend/README.md
-- ❌ frontend/setup_guide.md
-- ❌ mcp.json
-- ❌ .vscode/settings.json
-- ❌ context7 references
-
-### 6. ✅ Updated Code
-**script.js changes:**
-- Load system prompt from `system_prompt.md`
-- Load settings from `settings.json`
-- Load API key from `.env.local` (priority)
-- Fallback to localStorage API key
-- Apply all configurable settings to API requests
-
-## File Structure
+Pure client-side single-page application. No backend, no build step, no framework.
 
 ```
-chatbot/
-├── .github/
-│   └── workflows/
-│       └── deploy.yml          # Deployment with secrets support
-├── frontend/
-│   ├── .env.local.example      # NEW: Environment template
-│   ├── config.json             # API endpoints
-│   ├── index.html              # UI
-│   ├── script.js               # UPDATED: Load configs, env support
-│   ├── settings.json           # NEW: AI settings
-│   ├── style.css               # Styling
-│   └── system_prompt.md        # NEW: Customizable prompt
-├── .gitignore                  # UPDATED: Ignore .env.local
-├── README.md                   # UPDATED: Minimal docs
-├── SETUP.md                    # NEW: Complete setup guide
-├── TESTING.md                  # NEW: Testing checklist
-└── assignment.md               # Original requirements
+browser
+  ├── fetch config.json        → AI parameters
+  ├── fetch system_prompt.md   → bot identity + security rules
+  ├── fetch .env.local         → API key (local dev)
+  └── localStorage
+        ├── carbot_memory_v1   → rolling 20-turn conversation history
+        └── carbot_keys        → accumulated user profile (14 fields)
 ```
 
-## Configuration Flow
+---
 
-### Local Development
-1. User copies `.env.local.example` → `.env.local`
-2. User adds API key to `.env.local`
-3. Script loads key from `.env.local`
-4. Bot works locally
+## Feature Implementation
 
-### GitHub Pages Deployment
-1. User adds `OPENROUTER_API_KEY` secret in repo settings
-2. User pushes to main branch
-3. Workflow creates `.env.local` from secret
-4. Script loads key from `.env.local`
-5. Bot works on GitHub Pages
+### AI-Driven Memory Loop
 
-### Manual Fallback
-**REMOVED** - No longer supported. API key must be provided via `.env.local` or GitHub Secrets only.
+The bot extracts structured user facts from every reply without a separate extraction call.
 
-## Priority Order
-1. `.env.local` file (only source)
+**How it works:**
+1. The system prompt instructs the AI to respond in a strict two-block format:
+   ```
+   <reply>conversational text</reply>
+   <memory>{"field": "value"}</memory>
+   ```
+2. `parseAIResponse()` in `script.js` regex-extracts both blocks from the raw API output.
+3. `mergeKeyElements()` validates the JSON against a field whitelist + enum allowlists and merges changes into `localStorage['carbot_keys']`.
+4. Changed fields are returned and passed to `showMemoryToast()` for UI feedback.
+5. On each request, the accumulated profile is injected into the system message under `## Known user info:` so the AI never re-asks a known question.
 
-## How to Customize
+**Tracked fields:** `intent`, `budget`, `carType`, `make`, `model`, `year`, `mileage`, `condition`, `timeline`, `location`, `tradeIn`, `financing`, `sellerAsk`, `recipient`
 
-### Change Bot Personality
-Edit `frontend/system_prompt.md`
+**Enum allowlists:**
+- `intent`: `buy` | `sell`
+- `tradeIn`: `yes` | `no`
+- `financing`: `yes` | `no` | `cash`
 
-### Adjust AI Behavior
-Edit `frontend/settings.json`:
-- Increase `temperature` for more creative responses
-- Decrease for more focused responses
-- Change `model` to use different AI models
-- Adjust `max_tokens` for longer/shorter responses
+### Prompt Security
 
-### Update API Configuration
-Edit `frontend/config.json` to change API endpoints
+`system_prompt.md` is structured in named sections:
 
-## Security
+| Section | Purpose |
+|---|---|
+| IDENTITY & IMMUTABLE ROLE | Permanent persona, cannot be overridden |
+| SECURITY RULES | Injection patterns, topic lock, no self-disclosure |
+| OPERATING INSTRUCTIONS | Dual-output contract (reply + memory) |
+| REQUIRED OUTPUT FORMAT | Exact `<reply>`/`<memory>` template |
+| TRACKED FIELDS | Authoritative field list |
+| Known user info | Injected at runtime by `getBotReply()` |
 
-✅ `.env.local` never committed (in `.gitignore`)
-✅ GitHub Secrets encrypted and secure
-✅ API key hidden in settings UI (password field)
-✅ No hardcoded credentials in code
+### Input Sanitization
 
-## Testing
+`sanitizeUserInput()` runs on every submission before anything touches memory or the API:
+1. Hard-truncate to 500 characters
+2. Strip XML/HTML tags matching injection-sensitive names (`<system>`, `<memory>`, `<reply>`, `<prompt>`, etc.)
+3. Remove non-printable control characters (null bytes, escape sequences)
 
-Run through `TESTING.md` checklist to verify:
-- Local development with `.env.local`
-- GitHub Pages deployment with secrets
-- Manual API key entry
-- Configuration customization
-- All core features (memory, learning, proactive chat)
+HTTP-level enforcement: `maxlength="500"` on the `<input>` element.
 
-## Notes
+### Send Button Lock
 
-- No commits made (as requested)
-- All changes ready to test locally
-- Ready for GitHub deployment once user adds secret
-- Minimal, clean documentation
-- Fully configurable without code changes
+`setSending(true/false)` disables both the text input and the Send button for the duration of every API call:
+- Button label changes from `Send` → `...` while in-flight
+- Both re-enable and input regains focus on completion
+- Prevents duplicate submissions and queue build-up
 
-## Latest Changes
+### Memory Toast
 
-### Removed Manual API Key Entry UI
-- **Removed:** Settings button (⚙️) from header
-- **Removed:** Settings modal dialog
-- **Removed:** localStorage API key storage
-- **Simplified:** API key now only loaded from `.env.local` file
-- **Reason:** Streamlined configuration, single source of truth for API keys
-- **Impact:** Users MUST configure `.env.local` for local dev or GitHub Secret for deployment
+`showMemoryToast(changedFields)` displays a fixed-position badge (top-right) listing each updated field and its new value. Auto-fades after 4.5 s. Simultaneously, a `console.groupCollapsed('[CarBot] Memory updated')` log prints new fields and the full current knowledge base.
 
-**Updated files:**
-- `frontend/index.html` - Removed settings button and modal
-- `frontend/script.js` - Removed settings logic and localStorage API key
-- `frontend/style.css` - Removed modal and settings button styles
-- `README.md` - Updated API key configuration section
-- `SETUP.md` - Removed manual entry instructions
-- `TESTING.md` - Removed manual API key testing section
+### Conversation History
 
-### Merged Configuration Files
-- **Merged:** `config.json` and `settings.json` into single `config.json`
-- **Structure:**
-  - `api` section: API endpoint configuration (`openrouter_url`)
-  - `ai` section: AI model settings (model, temperature, max_tokens, etc.)
-- **Removed:** Separate `settings.json` file
-- **Updated:** `script.js` to use `CONFIG.api.*` and `CONFIG.ai.*`
-- **Benefit:** Single configuration file, clear organization, easier to maintain
+`localStorage['carbot_memory_v1']` stores `{role, content}` pairs. Capped at 20 entries (oldest dropped on overflow). Only the last 10 turns are sent with each API request to manage token usage. The stored `content` for assistant turns is the clean reply text only — never the raw `<reply>`/`<memory>` output.
 
-**Updated files:**
-- `frontend/config.json` - Merged structure with api and ai sections
-- `frontend/script.js` - Updated to use merged config
-- Deleted `frontend/settings.json` - No longer needed
-- `README.md` - Updated configuration documentation
-- `SETUP.md` - Updated configuration examples
-- `TESTING.md` - Updated configuration testing steps
+---
+
+## File Reference
+
+| File | Role |
+|---|---|
+| `frontend/index.html` | Shell, `#chatArea`, `#chatForm`, `#memoryToast` |
+| `frontend/style.css` | Layout, message bubbles, disabled states, toast animation |
+| `frontend/script.js` | All logic: config loading, sanitization, memory, API, UI |
+| `frontend/config.json` | API URL + AI parameters |
+| `frontend/system_prompt.md` | Bot identity, security rules, output format, field schema |
+| `frontend/.env.local.example` | Template for local API key |
+| `.github/workflows/deploy.yml` | Injects GitHub Secret → builds `.env.local` → deploys to Pages |
+
+---
+
+## Security Model
+
+| Threat | Mitigation |
+|---|---|
+| Prompt injection via user message | Injection tag stripping in `sanitizeUserInput()`; system prompt explicitly rejects instruction-like patterns |
+| Jailbreak / persona swap | Named in system prompt; identity declared immutable |
+| System prompt disclosure | System prompt instructs no self-disclosure; raw prompt never sent to client after load |
+| Memory poisoning via AI output | Field whitelist + enum allowlists + 80-char cap in `mergeKeyElements()` |
+| Token flooding / cost attack | 500-char input cap (HTML + JS) |
+| API key exposure | Key only in `.env.local` (gitignored) or GitHub Secret; never in source |
+
+---
+
+## Configuration Values (current)
+
+```json
+{
+  "model": "openrouter/aurora-alpha",
+  "temperature": 0.7,
+  "max_tokens": 500,
+  "top_p": 1,
+  "frequency_penalty": 0,
+  "presence_penalty": 0
+}
+```
+
+`max_tokens: 500` provides ~375 tokens for conversational reply and ~125 tokens for the JSON memory block — sufficient for concise 2–3 sentence replies.

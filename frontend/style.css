@@ -16,7 +16,7 @@ body {
 }
 header {
   display: flex;
-  justify-content: center;
+  justify-content: space-between;
   align-items: center;
   padding: 18px 24px 0 24px;
 }
@@ -25,6 +25,21 @@ header h1 {
   margin: 0;
   color: #2a2a2a;
 }
+#startOverBtn {
+  background: none;
+  border: 1px solid #c0392b;
+  color: #c0392b;
+  border-radius: 6px;
+  padding: 5px 12px;
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+  white-space: nowrap;
+}
+#startOverBtn:hover {
+  background: #c0392b;
+  color: #fff;
+}
 main#chatArea {
   flex: 1;
   padding: 18px 24px;
@@ -32,6 +47,27 @@ main#chatArea {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+.welcome-message {
+  text-align: center;
+  padding: 20px 16px 8px;
+  border-bottom: 1px solid #eee;
+  margin-bottom: 4px;
+}
+.welcome-icon {
+  font-size: 2.5rem;
+  margin-bottom: 8px;
+}
+.welcome-message h2 {
+  font-size: 1.15rem;
+  margin: 0 0 6px;
+  color: #1a3a6b;
+}
+.welcome-message p {
+  font-size: 0.92rem;
+  margin: 0;
+  color: #666;
+  line-height: 1.5;
 }
 .message {
   max-width: 80%;
