@@ -1,5 +1,7 @@
 # Car Seller Chatbot
 
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-GitHub%20Pages-blue?style=for-the-badge&logo=github)](https://martinkl164.github.io/chatbot/)
+
 A secure, proactive chatbot for buying and selling cars. Runs entirely in the browser — no backend required. Deployable to GitHub Pages.
 
 
