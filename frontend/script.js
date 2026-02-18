@@ -33,28 +33,49 @@ function addToMemory(role, content) {
 }
 function clearMemory() {
   setMemory([]);
+  clearKeyElements();
 }
 
-// --- Learning Loop: Extract Key Elements ---
-function extractKeyElements(message) {
-  // Simple: look for car, intent, recipient, etc.
-  const lower = message.toLowerCase();
-  const keys = {};
-  if (lower.includes('wife')) keys.recipient = 'wife';
-  if (lower.includes('husband')) keys.recipient = 'husband';
-  if (lower.includes('buy')) keys.intent = 'buy';
-  if (lower.includes('sell')) keys.intent = 'sell';
-  if (lower.includes('gift')) keys.intent = 'gift';
-  if (lower.includes('car')) keys.topic = 'car';
-  return keys;
-}
-function storeKeyElements(elements) {
-  let keys = JSON.parse(localStorage.getItem('carbot_keys') || '{}');
-  keys = { ...keys, ...elements };
-  localStorage.setItem('carbot_keys', JSON.stringify(keys));
-}
+// --- Learning Loop: AI-driven Key Elements ---
+const KEYS_STORAGE_KEY = 'carbot_keys';
+const TRACKED_FIELDS = [
+  'intent', 'budget', 'carType', 'make', 'model', 'year',
+  'mileage', 'condition', 'timeline', 'location',
+  'tradeIn', 'financing', 'sellerAsk', 'recipient'
+];
+
 function getKeyElements() {
-  return JSON.parse(localStorage.getItem('carbot_keys') || '{}');
+  return JSON.parse(localStorage.getItem(KEYS_STORAGE_KEY) || '{}');
+}
+function mergeKeyElements(newFields) {
+  // Only accept known fields, merge into stored object
+  const current = getKeyElements();
+  const changed = {};
+  for (const field of TRACKED_FIELDS) {
+    if (newFields[field] !== undefined && newFields[field] !== null && newFields[field] !== '') {
+      if (current[field] !== newFields[field]) {
+        changed[field] = newFields[field];
+      }
+      current[field] = newFields[field];
+    }
+  }
+  localStorage.setItem(KEYS_STORAGE_KEY, JSON.stringify(current));
+  return changed; // returns only fields that changed
+}
+function clearKeyElements() {
+  localStorage.removeItem(KEYS_STORAGE_KEY);
+}
+
+// Parse <reply>...</reply> and <memory>{...}</memory> from raw AI output
+function parseAIResponse(raw) {
+  const replyMatch = raw.match(/<reply>\s*([\s\S]*?)\s*<\/reply>/i);
+  const memoryMatch = raw.match(/<memory>\s*([\s\S]*?)\s*<\/memory>/i);
+  const reply = replyMatch ? replyMatch[1].trim() : raw.trim();
+  let memoryData = null;
+  if (memoryMatch) {
+    try { memoryData = JSON.parse(memoryMatch[1].trim()); } catch (e) {}
+  }
+  return { reply, memoryData };
 }
 
 // --- UI ---
@@ -76,6 +97,27 @@ function removeLoading() {
   const last = chatArea.lastChild;
   if (last && last.textContent === '...') chatArea.removeChild(last);
 }
+function showMemoryToast(changedFields) {
+  const toast = document.getElementById('memoryToast');
+  if (!toast) return;
+  const fieldLabels = {
+    intent: 'Intent', budget: 'Budget', carType: 'Car type', make: 'Make',
+    model: 'Model', year: 'Year', mileage: 'Mileage', condition: 'Condition',
+    timeline: 'Timeline', location: 'Location', tradeIn: 'Trade-in',
+    financing: 'Financing', sellerAsk: 'Asking price', recipient: 'Recipient'
+  };
+  const items = Object.entries(changedFields)
+    .map(([k, v]) => `<li><strong>${fieldLabels[k] || k}:</strong> ${v}</li>`)
+    .join('');
+  toast.innerHTML = `<span class="toast-title">&#x1F9E0; Memory updated</span><ul>${items}</ul>`;
+  toast.classList.remove('toast-hide');
+  toast.classList.add('toast-show');
+  clearTimeout(toast._hideTimer);
+  toast._hideTimer = setTimeout(() => {
+    toast.classList.remove('toast-show');
+    toast.classList.add('toast-hide');
+  }, 4500);
+}
 function showProactiveGreeting() {
   if (getMemory().length === 0) {
     const greeting = "Hi! I'm your car selling assistant. What brings you here today?";
@@ -96,29 +138,41 @@ chatForm.onsubmit = async e => {
   if (!msg) return;
   appendMessage('user', msg);
   addToMemory('user', msg);
-  storeKeyElements(extractKeyElements(msg));
   userInput.value = '';
   showLoading();
-  const reply = await getBotReply();
+  const { reply, changedFields } = await getBotReply();
   removeLoading();
   appendMessage('bot', reply);
   addToMemory('assistant', reply);
+  if (changedFields && Object.keys(changedFields).length > 0) {
+    showMemoryToast(changedFields);
+  }
 };
 
 async function getBotReply() {
   const apiKey = getApiKey();
-  if (!apiKey) return 'API key not configured. Please set OPENROUTER_API_KEY in .env.local (local) or GitHub Secrets (deployment).';
+  if (!apiKey) return {
+    reply: 'API key not configured. Please set OPENROUTER_API_KEY in .env.local (local) or GitHub Secrets (deployment).',
+    changedFields: {}
+  };
+
   const memory = getMemory();
   const keyElements = getKeyElements();
-  // Build context prompt
+
+  // Build system message with known user context
   let context = SYSTEM_PROMPT;
-  if (Object.keys(keyElements).length) {
-    context += '\nKnown user info: ' + JSON.stringify(keyElements);
+  const knownFields = Object.entries(keyElements)
+    .filter(([, v]) => v !== null && v !== undefined && v !== '')
+    .map(([k, v]) => `  ${k}: ${v}`);
+  if (knownFields.length) {
+    context += '\n\n## Known user info:\n' + knownFields.join('\n');
   }
+
   const messages = [
     { role: 'system', content: context },
     ...memory.slice(-10).map(m => ({ ...m, role: m.role === 'bot' ? 'assistant' : m.role }))
   ];
+
   try {
     const res = await fetch(CONFIG.api.openrouter_url, {
       method: 'POST',
@@ -138,11 +192,27 @@ async function getBotReply() {
         presence_penalty: CONFIG.ai.presence_penalty
       })
     });
-    if (!res.ok) throw new Error('API error');
+    if (!res.ok) throw new Error('API error ' + res.status);
     const data = await res.json();
-    return data.choices?.[0]?.message?.content?.trim() || 'Sorry, I did not understand.';
+    const raw = data.choices?.[0]?.message?.content?.trim() || '';
+
+    if (!raw) return { reply: 'Sorry, I did not understand.', changedFields: {} };
+
+    const { reply, memoryData } = parseAIResponse(raw);
+
+    // Merge extracted memory and collect changes
+    let changedFields = {};
+    if (memoryData && typeof memoryData === 'object') {
+      changedFields = mergeKeyElements(memoryData);
+      console.groupCollapsed('[CarBot] Memory updated');
+      console.log('New fields:', changedFields);
+      console.log('Full knowledge base:', getKeyElements());
+      console.groupEnd();
+    }
+
+    return { reply, changedFields };
   } catch (e) {
-    return 'Error contacting OpenRouter: ' + e.message;
+    return { reply: 'Error contacting OpenRouter: ' + e.message, changedFields: {} };
   }
 }
 
