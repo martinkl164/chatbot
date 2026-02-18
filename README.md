@@ -60,23 +60,23 @@ See [SETUP.md](SETUP.md) for full step-by-step instructions.
   },
   "ai": {
     "model": "openrouter/aurora-alpha",
-    "temperature": 0.7,
-    "max_tokens": 500,
+    "temperature": 0.3,
+    "max_tokens": 400,
     "top_p": 1,
-    "frequency_penalty": 0,
-    "presence_penalty": 0
+    "frequency_penalty": 0.3,
+    "presence_penalty": 0.1
   }
 }
 ```
 
-| Field | Description |
-|---|---|
-| `model` | Any OpenRouter-compatible model ID |
-| `temperature` | Creativity: 0 = focused, 2 = creative |
-| `max_tokens` | Max tokens per reply (500 accommodates reply + memory JSON) |
-| `top_p` | Nucleus sampling |
-| `frequency_penalty` | Reduce word repetition |
-| `presence_penalty` | Encourage new topics |
+| Field | Value | Description |
+|---|---|---|
+| `model` | `openrouter/aurora-alpha` | Any OpenRouter-compatible model ID |
+| `temperature` | `0.3` | Low creativity — keeps replies consistent and on-task. A sales assistant should be predictable, not creative. |
+| `max_tokens` | `400` | Enough for a 2-3 sentence reply plus the memory JSON block. Trimmed from 500 to reduce cost without losing output quality. |
+| `top_p` | `1` | Full token pool considered — no benefit to restricting this for a task-focused bot. |
+| `frequency_penalty` | `0.3` | Mild penalty for repeating the same words. Prevents the bot from opening every reply with "Great choice!" or similar filler. |
+| `presence_penalty` | `0.1` | Small nudge to vary follow-up questions across turns instead of cycling through the same ones. |
 
 ### API Key
 
