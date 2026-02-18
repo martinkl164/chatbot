@@ -2,6 +2,10 @@
 
 A secure, proactive chatbot for buying and selling cars. Runs entirely in the browser — no backend required. Deployable to GitHub Pages.
 
+
+https://github.com/user-attachments/assets/4cbaf527-82de-4a18-9530-9ee67f6e956d
+
+
 ## Features
 
 - **AI-driven memory loop** — after every reply the AI extracts structured facts (budget, car type, make, model, timeline, etc.) and stores them in `localStorage`. Those facts are fed back into every subsequent request so the bot never asks the same question twice.
