@@ -26,9 +26,20 @@ jobs:
         uses: actions/checkout@v4
       
       - name: Create .env.local from secret
+        env:
+          API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         run: |
-          echo "OPENROUTER_API_KEY=${{ secrets.OPENROUTER_API_KEY }}" > frontend/.env.local
-        if: ${{ secrets.OPENROUTER_API_KEY != '' }}
+          if [ -z "$API_KEY" ]; then
+            echo "::error::Missing required secret: OPENROUTER_API_KEY"
+            echo "::error::Please add OPENROUTER_API_KEY to your repository secrets:"
+            echo "::error::  1. Go to your repository on GitHub"
+            echo "::error::  2. Navigate to Settings > Secrets and variables > Actions"
+            echo "::error::  3. Click 'New repository secret'"
+            echo "::error::  4. Name it OPENROUTER_API_KEY and paste your OpenRouter API key"
+            echo "::error::  5. Get your API key at https://openrouter.ai/keys"
+            exit 1
+          fi
+          echo "OPENROUTER_API_KEY=$API_KEY" > frontend/.env.local
       
       - name: Setup Pages
         uses: actions/configure-pages@v4
