@@ -4,10 +4,10 @@
   },
   "ai": {
     "model": "openrouter/aurora-alpha",
-    "temperature": 0.7,
-    "max_tokens": 500,
-    "top_p": 1,
-    "frequency_penalty": 0,
-    "presence_penalty": 0
+    "temperature": 0.3, // we want him to be professional and concise, not creative
+    "max_tokens": 400,
+    "top_p": 1, 
+    "frequency_penalty": 0.3, // prevent him from repeating himself too much
+    "presence_penalty": 0.1 // encourage him to talk about new topics
   }
 }
