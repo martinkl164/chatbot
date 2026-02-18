@@ -56,6 +56,23 @@ form#chatForm {
   gap: 8px;
   padding: 0 24px;
 }
+.input-wrap {
+  flex: 1;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+#charCount {
+  font-size: 0.7rem;
+  color: #aaa;
+  text-align: right;
+  margin-top: 2px;
+  transition: color 0.2s;
+}
+#charCount.warn {
+  color: #c0392b;
+  font-weight: 600;
+}
 #userInput {
   flex: 1;
   padding: 10px 12px;
@@ -75,6 +92,14 @@ form#chatForm {
 }
 #chatForm button:hover {
   background: #2952a3;
+}
+#chatForm button:disabled {
+  background: #8a9abb;
+  cursor: not-allowed;
+}
+#userInput:disabled {
+  background: #f0f0f0;
+  color: #999;
 }
 @media (max-width: 600px) {
   .container {

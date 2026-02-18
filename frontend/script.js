@@ -36,6 +36,22 @@ function clearMemory() {
   clearKeyElements();
 }
 
+// --- Security: Input Sanitization ---
+const MAX_INPUT_LENGTH = 500; // chars
+
+// Injection-tag patterns to neutralize in user input before sending to API
+const INJECTION_TAG_PATTERN = /<\/?\s*(system|memory|reply|prompt|instruction|context|assistant|user|role|input|output|cmd|command|task|tool)[^>]*>/gi;
+
+function sanitizeUserInput(text) {
+  // 1. Hard cap length
+  let safe = text.slice(0, MAX_INPUT_LENGTH);
+  // 2. Strip XML/HTML tags that could bleed into the prompt template
+  safe = safe.replace(INJECTION_TAG_PATTERN, '');
+  // 3. Remove null bytes and non-printable control characters (except newline/tab)
+  safe = safe.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
+  return safe.trim();
+}
+
 // --- Learning Loop: AI-driven Key Elements ---
 const KEYS_STORAGE_KEY = 'carbot_keys';
 const TRACKED_FIELDS = [
@@ -44,20 +60,37 @@ const TRACKED_FIELDS = [
   'tradeIn', 'financing', 'sellerAsk', 'recipient'
 ];
 
+// Allowlists for enum-typed fields — reject out-of-range values from AI
+const FIELD_ALLOWLISTS = {
+  intent:    ['buy', 'sell'],
+  tradeIn:   ['yes', 'no'],
+  financing: ['yes', 'no', 'cash']
+};
+
+// Per-field max string length — prevents runaway data storage
+const FIELD_MAX_LENGTH = 80;
+
 function getKeyElements() {
   return JSON.parse(localStorage.getItem(KEYS_STORAGE_KEY) || '{}');
 }
 function mergeKeyElements(newFields) {
-  // Only accept known fields, merge into stored object
+  // Only accept known fields, validate values, merge into stored object
   const current = getKeyElements();
   const changed = {};
   for (const field of TRACKED_FIELDS) {
-    if (newFields[field] !== undefined && newFields[field] !== null && newFields[field] !== '') {
-      if (current[field] !== newFields[field]) {
-        changed[field] = newFields[field];
-      }
-      current[field] = newFields[field];
+    const raw = newFields[field];
+    if (raw === undefined || raw === null || raw === '') continue;
+    // Must be a string
+    if (typeof raw !== 'string') continue;
+    // Check allowlist for enum fields
+    if (FIELD_ALLOWLISTS[field] && !FIELD_ALLOWLISTS[field].includes(raw.toLowerCase())) continue;
+    // Enforce max length per field
+    const value = raw.slice(0, FIELD_MAX_LENGTH).trim();
+    if (!value) continue;
+    if (current[field] !== value) {
+      changed[field] = value;
     }
+    current[field] = value;
   }
   localStorage.setItem(KEYS_STORAGE_KEY, JSON.stringify(current));
   return changed; // returns only fields that changed
@@ -131,22 +164,46 @@ function getApiKey() {
   return ENV_API_KEY;
 }
 
+// Character counter
+const charCount = document.getElementById('charCount');
+if (charCount) {
+  userInput.addEventListener('input', () => {
+    const len = userInput.value.length;
+    charCount.textContent = `${len}/500`;
+    charCount.classList.toggle('warn', len > 450);
+  });
+}
+
 // --- Chat Logic ---
+const sendButton = chatForm.querySelector('button[type="submit"]');
+
+function setSending(isSending) {
+  sendButton.disabled = isSending;
+  userInput.disabled = isSending;
+  sendButton.textContent = isSending ? '...' : 'Send';
+}
+
 chatForm.onsubmit = async e => {
   e.preventDefault();
-  const msg = userInput.value.trim();
+  const raw = userInput.value.trim();
+  if (!raw) return;
+  const msg = sanitizeUserInput(raw);
   if (!msg) return;
   appendMessage('user', msg);
   addToMemory('user', msg);
   userInput.value = '';
+  if (charCount) { charCount.textContent = '0/500'; charCount.classList.remove('warn'); }
+  setSending(true);
   showLoading();
   const { reply, changedFields } = await getBotReply();
   removeLoading();
+  setSending(false);
   appendMessage('bot', reply);
   addToMemory('assistant', reply);
   if (changedFields && Object.keys(changedFields).length > 0) {
     showMemoryToast(changedFields);
   }
+  userInput.focus();
 };
 
 async function getBotReply() {
